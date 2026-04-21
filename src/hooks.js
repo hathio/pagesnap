@@ -34,4 +34,13 @@ async function runLifecycleHooks(config, event, results = []) {
   runHook(cmd, context);
 }
 
-module.exports = { runHook, buildHookContext, runLifecycleHooks };
+/**
+ * Returns a list of all hook event names that are configured in the given config.
+ * Useful for logging or validating which lifecycle hooks are active.
+ */
+function getConfiguredHooks(config) {
+  const hooks = config.hooks || {};
+  return Object.keys(hooks).filter(key => !!hooks[key]);
+}
+
+module.exports = { runHook, buildHookContext, runLifecycleHooks, getConfiguredHooks };
