@@ -14,7 +14,9 @@ function runHook(hookCmd, context = {}) {
   } catch (err) {
     console.error(`[pagesnap] hook failed: ${hookCmd}`);
     console.error(err.message);
+    return false;
   }
+  return true;
 }
 
 function buildHookContext(event, results = []) {
@@ -43,4 +45,17 @@ function getConfiguredHooks(config) {
   return Object.keys(hooks).filter(key => !!hooks[key]);
 }
 
-module.exports = { runHook, buildHookContext, runLifecycleHooks, getConfiguredHooks };
+/**
+ * Validates that all hook keys in the config are recognized lifecycle event names.
+ * Logs a warning for any unknown hook keys to help catch typos in config.
+ */
+function validateHooks(config, knownEvents = []) {
+  const hooks = config.hooks || {};
+  for (const key of Object.keys(hooks)) {
+    if (!knownEvents.includes(key)) {
+      console.warn(`[pagesnap] unknown hook event: "${key}" (known: ${knownEvents.join(', ')})`);
+    }
+  }
+}
+
+module.exports = { runHook, buildHookContext, runLifecycleHooks, getConfiguredHooks, validateHooks };
