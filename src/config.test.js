@@ -31,6 +31,16 @@ describe('loadConfig', () => {
     fs.writeFileSync(path.join(dir, CONFIG_FILENAME), 'not json {{');
     expect(() => loadConfig(dir)).toThrow('Failed to parse');
   });
+
+  test('does not mutate the defaults object', () => {
+    const dir = makeTmpDir();
+    const userConfig = { baseUrl: 'https://example.com' };
+    fs.writeFileSync(path.join(dir, CONFIG_FILENAME), JSON.stringify(userConfig));
+
+    const before = { ...defaults };
+    loadConfig(dir);
+    expect(defaults).toEqual(before);
+  });
 });
 
 describe('initConfig', () => {
