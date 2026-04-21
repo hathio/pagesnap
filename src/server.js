@@ -14,7 +14,18 @@ const MIME_TYPES = {
 export function startReportServer(reportDir, port = 3000) {
   const server = createServer(async (req, res) => {
     let urlPath = req.url === '/' ? '/index.html' : req.url;
+
+    // Strip query strings to avoid path traversal or file lookup issues
+    urlPath = urlPath.split('?')[0];
+
     const filePath = path.join(reportDir, urlPath);
+
+    // Prevent directory traversal attacks
+    if (!filePath.startsWith(path.resolve(reportDir))) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden');
+      return;
+    }
 
     if (!existsSync(filePath)) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
