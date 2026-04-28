@@ -12,14 +12,17 @@ export function buildSessionMeta(mode, env = process.env) {
   const base = { mode, startedAt: new Date().toISOString() };
 
   if (mode === 'ci') {
+    const buildUrl = env.CI_JOB_URL ||
+      (env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY && env.GITHUB_RUN_ID
+        ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`
+        : undefined);
+
     return {
       ...base,
       label: env.CI_JOB_NAME || env.GITHUB_WORKFLOW || 'ci',
       commit: env.GITHUB_SHA || env.CI_COMMIT_SHA || undefined,
       branch: env.GITHUB_REF_NAME || env.CI_COMMIT_BRANCH || undefined,
-      buildUrl: env.CI_JOB_URL || env.GITHUB_SERVER_URL
-        ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`
-        : undefined,
+      buildUrl,
     };
   }
 
