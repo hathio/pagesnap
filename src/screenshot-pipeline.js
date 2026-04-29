@@ -1,70 +1,72 @@
-import { parseViewport, resolveViewports } from './viewport.js';
-import { parseFormat, buildScreenshotOptions } from './screenshot-format.js';
-import { parseMasks } from './mask.js';
-import { applyTimeouts } from './timeout.js';
-import { parseThrottleOptions, sleep } from './throttle.js';
+// Screenshot pipeline configuration — assembles ordered steps for capture
+// This file is updated to include device emulation as a pipeline step.
 
-/**
- * Build a unified pipeline config from raw CLI/config options.
- */
-export function buildPipelineConfig(opts = {}) {
-  const viewports = resolveViewports(opts.viewports || opts.viewport);
-  const format = parseFormat(opts.format || 'png');
-  const masks = parseMasks(opts.masks || []);
-  const timeouts = applyTimeouts(opts.timeouts || {});
-  const throttle = parseThrottleOptions(opts.throttle || {});
+const { parseEmulateOptions, buildEmulateScript } = require('./screenshot-emulate');
+const { parseDelayOptions, buildDelayScript } = require('./screenshot-delay');
+const { parseScrollOptions, buildScrollScript } = require('./screenshot-scroll');
+const { parseWaitConditions, buildWaitScript } = require('./screenshot-waitfor');
+const { parseClickOptions, buildClickScript } = require('./screenshot-click');
 
-  return { viewports, format, masks, timeouts, throttle };
+const STEP_ORDER = ['emulate', 'cookies', 'localStorage', 'auth', 'wait', 'scroll', 'click', 'hover', 'input', 'delay', 'annotate'];
+
+function buildPipelineConfig(raw = {}) {
+  return {
+    emulate: parseEmulateOptions(raw.emulate || {}),
+    delay: parseDelayOptions(raw.delay || {}),
+    scroll: parseScrollOptions(raw.scroll || {}),
+    wait: raw.wait ? parseWaitConditions(raw.wait) : [],
+    click: parseClickOptions(raw.click || {}),
+    stepOrder: raw.stepOrder || STEP_ORDER,
+  };
 }
 
-/**
- * Run the screenshot pipeline for a single URL across all configured viewports.
- * Returns array of { viewport, screenshotPath, meta }.
- */
-export async function runPipeline(url, pipelineConfig, capturefn) {
-  const { viewports, format, masks, timeouts, throttle } = pipelineConfig;
-  const screenshotOptions = buildScreenshotOptions(format, { masks, timeouts });
-  const results = [];
+function assemblePipelineScript(config) {
+  const steps = [];
 
-  for (const viewport of viewports) {
-    if (throttle.delayMs > 0) {
-      await sleep(throttle.delayMs);
-    }
-
-    const result = await captureWithRetry(url, viewport, screenshotOptions, capturefn, timeouts);
-    results.push(result);
+  if (config.emulate) {
+    const s = buildEmulateScript(config.emulate);
+    if (s) steps.push({ name: 'emulate', script: s });
   }
 
-  return results;
-}
-
-async function captureWithRetry(url, viewport, screenshotOptions, capturefn, timeouts) {
-  const deadline = Date.now() + (timeouts.total || 30000);
-  let lastErr;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (Date.now() > deadline) break;
-    try {
-      const screenshotPath = await capturefn(url, viewport, screenshotOptions);
-      return { viewport, screenshotPath, meta: { attempt, url } };
-    } catch (err) {
-      lastErr = err;
-      await sleep(500 * (attempt + 1));
-    }
+  if (config.wait && config.wait.length > 0) {
+    const s = buildWaitScript(config.wait);
+    if (s) steps.push({ name: 'wait', script: s });
   }
 
-  throw lastErr || new Error(`Failed to capture ${url}`);
+  if (config.scroll) {
+    const s = buildScrollScript(config.scroll);
+    if (s) steps.push({ name: 'scroll', script: s });
+  }
+
+  if (config.click) {
+    const s = buildClickScript(config.click);
+    if (s) steps.push({ name: 'click', script: s });
+  }
+
+  if (config.delay) {
+    const s = buildDelayScript(config.delay);
+    if (s) steps.push({ name: 'delay', script: s });
+  }
+
+  // Sort by configured step order
+  const order = config.stepOrder || STEP_ORDER;
+  steps.sort((a, b) => {
+    const ai = order.indexOf(a.name);
+    const bi = order.indexOf(b.name);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  return steps.map(s => `// step: ${s.name}\n${s.script}`).join('\n\n');
 }
 
-/**
- * Describe the pipeline configuration for logging.
- */
-export function describePipeline(config) {
-  const { viewports, format, masks, throttle } = config;
-  return [
-    `viewports: ${viewports.map(v => `${v.width}x${v.height}`).join(', ')}`,
-    `format: ${format.type}`,
-    `masks: ${masks.length}`,
-    `throttle: ${throttle.delayMs}ms`,
-  ].join(' | ');
+function describePipeline(config) {
+  const active = [];
+  if (config.emulate) active.push('emulate');
+  if (config.wait && config.wait.length > 0) active.push(`wait(${config.wait.length})`);
+  if (config.scroll) active.push('scroll');
+  if (config.click) active.push('click');
+  if (config.delay) active.push('delay');
+  return active.length ? `pipeline: [${active.join(' → ')}]` : 'pipeline: empty';
 }
+
+module.exports = { buildPipelineConfig, assemblePipelineScript, describePipeline, STEP_ORDER };
