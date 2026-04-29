@@ -43,4 +43,12 @@ function listStrategyPresets() {
   }));
 }
 
-module.exports = { parseWaitStrategy, mergeWaitConditions, describeWaitStrategy, listStrategyPresets, STRATEGY_PRESETS };
+/**
+ * Returns true if the given strategy name is a known preset.
+ * Useful for validation before calling parseWaitStrategy.
+ */
+function isValidStrategy(name) {
+  return name === 'none' || Object.prototype.hasOwnProperty.call(STRATEGY_PRESETS, name);
+}
+
+module.exports = { parseWaitStrategy, mergeWaitConditions, describeWaitStrategy, listStrategyPresets, isValidStrategy, STRATEGY_PRESETS };
